@@ -1,4 +1,4 @@
-import { getRandomUserAgent, sleep, isDateWithinLastDays, stripHtml, formatDateToChineseWithTime, escapeHtml} from '../helpers';
+import { getRandomUserAgent, sleep, isDateWithinLastDays, stripHtml, formatDateToChineseWithTime, escapeHtml} from '../helpers.js';
 
 const TwitterDataSource = {
     async fetch(env, foloCookie) {
@@ -64,8 +64,8 @@ const TwitterDataSource = {
                 });
 
                 if (!response.ok) {
-                    console.error(`Failed to fetch Twitter data, page ${i + 1}: ${response.statusText}`);
-                    break;
+                    const body = (await response.text()).slice(0, 300);
+                    throw new Error(`Folo Twitter API ${response.status} ${response.statusText}: ${body}`);
                 }
                 const data = await response.json();
                 if (data && data.data && data.data.length > 0) {
@@ -86,7 +86,7 @@ const TwitterDataSource = {
                 }
             } catch (error) {
                 console.error(`Error fetching Twitter data, page ${i + 1}:`, error);
-                break;
+                throw error;
             }
 
             // Random wait time between 0 and 5 seconds to avoid rate limiting

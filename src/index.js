@@ -14,13 +14,17 @@ export default {
     async fetch(request, env) {
         // Check essential environment variables
         const requiredEnvVars = [
-            'DATA_KV', 'GEMINI_API_KEY', 'GEMINI_API_URL', 'DEFAULT_GEMINI_MODEL', 'OPEN_TRANSLATE', 'USE_MODEL_PLATFORM',
+            'DATA_KV', 'OPEN_TRANSLATE', 'USE_MODEL_PLATFORM',
             'GITHUB_TOKEN', 'GITHUB_REPO_OWNER', 'GITHUB_REPO_NAME','GITHUB_BRANCH',
             'LOGIN_USERNAME', 'LOGIN_PASSWORD',
             'PODCAST_TITLE','PODCAST_BEGIN','PODCAST_END',
             'FOLO_COOKIE_KV_KEY','FOLO_DATA_API','FOLO_FILTER_DAYS',
         ];
-        console.log(env);
+        if (String(env.USE_MODEL_PLATFORM || '').startsWith('OPEN')) {
+            requiredEnvVars.push('OPENAI_API_KEY', 'OPENAI_API_URL', 'DEFAULT_OPEN_MODEL');
+        } else {
+            requiredEnvVars.push('GEMINI_API_KEY', 'GEMINI_API_URL', 'DEFAULT_GEMINI_MODEL');
+        }
         const missingVars = requiredEnvVars.filter(varName => !env[varName]);
 
         if (missingVars.length > 0) {

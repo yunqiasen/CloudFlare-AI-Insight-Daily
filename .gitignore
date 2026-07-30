@@ -1,0 +1,4 @@
+.ace-tool/
+node_modules/
+.dev.vars
+.wrangler/

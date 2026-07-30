@@ -1,4 +1,4 @@
-import { getRandomUserAgent, sleep, isDateWithinLastDays, stripHtml, formatDateToChineseWithTime, escapeHtml } from '../helpers';
+import { getRandomUserAgent, sleep, isDateWithinLastDays, stripHtml, formatDateToChineseWithTime, escapeHtml } from '../helpers.js';
 
 const NewsAggregatorDataSource = {
     type: 'news-aggregator',
@@ -64,8 +64,8 @@ const NewsAggregatorDataSource = {
                 });
 
                 if (!response.ok) {
-                    console.error(`Failed to fetch News Aggregator data, page ${i + 1}: ${response.statusText}`);
-                    break;
+                    const body = (await response.text()).slice(0, 300);
+                    throw new Error(`Folo News API ${response.status} ${response.statusText}: ${body}`);
                 }
                 const data = await response.json();
                 if (data && data.data && data.data.length > 0) {
@@ -86,7 +86,7 @@ const NewsAggregatorDataSource = {
                 }
             } catch (error) {
                 console.error(`Error fetching News Aggregator data, page ${i + 1}:`, error);
-                break;
+                throw error;
             }
 
             await sleep(Math.random() * 5000);

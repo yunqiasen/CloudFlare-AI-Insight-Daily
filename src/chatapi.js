@@ -151,7 +151,7 @@ async function* callGeminiChatAPIStream(env, promptText, systemPromptText = null
             const errorBodyText = await response.text();
             let errorData;
             try {
-                errorData = JSON.parse(errorBodyBody);
+                errorData = JSON.parse(errorBodyText);
             } catch (e) {
                 errorData = errorBodyText;
             }
@@ -250,6 +250,9 @@ async function* callGeminiChatAPIStream(env, promptText, systemPromptText = null
                 if (message === "" || message === "[DONE]") {
                     continue;
                 }
+                if (message.startsWith(':')) {
+                    continue; // SSE keep-alive/comment, e.g. ": OPENROUTER PROCESSING"
+                }
                 
                 const parsedChunk = processJsonChunk(message);
                 if (parsedChunk) {
@@ -301,6 +304,93 @@ async function* callGeminiChatAPIStream(env, promptText, systemPromptText = null
     }
 }
 
+export function buildOpenAIChatUrl(baseUrl) {
+    const base = String(baseUrl || '').replace(/\/+$/, '');
+    return `${base}${base.endsWith('/v1') ? '' : '/v1'}/chat/completions`;
+}
+
+async function getOpenAIRetryDelay(response, attempt) {
+    const retryAfter = response.headers.get('retry-after')?.trim();
+    if (retryAfter) {
+        const seconds = Number(retryAfter);
+        if (Number.isFinite(seconds) && seconds >= 0) return Math.min(10000, seconds * 1000);
+        const at = Date.parse(retryAfter);
+        if (Number.isFinite(at)) return Math.min(10000, Math.max(0, at - Date.now()));
+    }
+    try {
+        const body = await response.clone().json();
+        const seconds = Number(body?.error?.metadata?.retry_after_seconds);
+        if (Number.isFinite(seconds) && seconds >= 0) return Math.min(10000, seconds * 1000);
+    } catch {
+        // Non-JSON error body; use exponential backoff below.
+    }
+    return Math.min(8000, 1000 * 2 ** (attempt - 1));
+}
+
+const TRANSIENT_OPENAI_STATUS = new Set([408, 429, 500, 502, 503, 504]);
+
+async function inspectOpenAIResponse(response) {
+    if (!response.ok) {
+        return { retryable: TRANSIENT_OPENAI_STATUS.has(response.status) };
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    try {
+        if (contentType.includes('text/event-stream')) {
+            const text = await response.clone().text();
+            let hasContent = false;
+            let providerStatus = null;
+            for (const line of text.split(/\r?\n/)) {
+                const raw = line.startsWith('data:') ? line.slice(5).trim() : line.trim();
+                if (!raw || raw === '[DONE]') continue;
+                try {
+                    const chunk = JSON.parse(raw);
+                    if (chunk.error) providerStatus = Number(chunk.error.code) || 502;
+                    if (chunk.choices?.some(choice => choice.delta?.content)) hasContent = true;
+                } catch {
+                    // The streaming parser will report malformed final data if needed.
+                }
+            }
+            if (providerStatus !== null) return { retryable: TRANSIENT_OPENAI_STATUS.has(providerStatus) };
+            return { retryable: !hasContent };
+        }
+
+        if (contentType.includes('application/json')) {
+            const data = await response.clone().json();
+            if (data?.error) {
+                const providerStatus = Number(data.error.code) || 502;
+                return { retryable: TRANSIENT_OPENAI_STATUS.has(providerStatus) };
+            }
+            const content = data?.choices?.[0]?.message?.content;
+            return { retryable: typeof content !== 'string' || !content.trim() };
+        }
+    } catch {
+        return { retryable: true };
+    }
+    return { retryable: false };
+}
+
+async function fetchOpenAIWithRetry(url, options, maxAttempts = 5) {
+    let lastError;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            const response = await fetch(url, options);
+            const inspection = await inspectOpenAIResponse(response);
+            if (!inspection.retryable || attempt === maxAttempts) {
+                return response;
+            }
+            const delay = await getOpenAIRetryDelay(response, attempt);
+            await response.body?.cancel();
+            await new Promise((resolve) => setTimeout(resolve, delay));
+        } catch (error) {
+            lastError = error;
+            if (attempt === maxAttempts) throw error;
+            await new Promise((resolve) => setTimeout(resolve, Math.min(8000, 1000 * 2 ** (attempt - 1))));
+        }
+    }
+    throw lastError || new Error('OpenAI request failed after retries.');
+}
+
 /**
  * Calls the OpenAI Chat API (non-streaming).
  *
@@ -317,7 +407,7 @@ async function callOpenAIChatAPI(env, promptText, systemPromptText = null) {
     if (!env.OPENAI_API_KEY) {
         throw new Error("OPENAI_API_KEY environment variable is not set for OpenAI models.");
     }
-    const url = `${env.OPENAI_API_URL}/v1/chat/completions`;
+    const url = buildOpenAIChatUrl(env.OPENAI_API_URL);
     
     const messages = [];
     if (systemPromptText && typeof systemPromptText === 'string' && systemPromptText.trim() !== '') {
@@ -338,14 +428,17 @@ async function callOpenAIChatAPI(env, promptText, systemPromptText = null) {
     };
 
     try {
-        const response = await fetch(url, {
+        const maxAttempts = Math.min(8, Math.max(1, Number(env.OPENAI_MAX_ATTEMPTS || 5)));
+        const response = await fetchOpenAIWithRetry(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${env.OPENAI_API_KEY}`
+                'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+                'HTTP-Referer': 'https://ai-daily.qaz875133228.workers.dev',
+                'X-Title': 'AI Insight Daily'
             },
             body: JSON.stringify(payload)
-        });
+        }, maxAttempts);
 
         if (!response.ok) {
             const errorBodyText = await response.text();
@@ -364,6 +457,9 @@ async function callOpenAIChatAPI(env, promptText, systemPromptText = null) {
 
         const data = await response.json();
 
+        if (data.error) {
+            throw new Error(`OpenAI Chat API error (${data.error.code || 502}): ${data.error.message || 'Unknown provider error'}`);
+        }
         if (data.choices && data.choices.length > 0 && data.choices[0].message && data.choices[0].message.content) {
             return data.choices[0].message.content;
         } else {
@@ -394,7 +490,7 @@ async function* callOpenAIChatAPIStream(env, promptText, systemPromptText = null
     if (!env.OPENAI_API_KEY) {
         throw new Error("OPENAI_API_KEY environment variable is not set for OpenAI models.");
     }
-    const url = `${env.OPENAI_API_URL}/v1/chat/completions`;
+    const url = buildOpenAIChatUrl(env.OPENAI_API_URL);
 
     const messages = [];
     if (systemPromptText && typeof systemPromptText === 'string' && systemPromptText.trim() !== '') {
@@ -417,14 +513,17 @@ async function* callOpenAIChatAPIStream(env, promptText, systemPromptText = null
 
     let response;
     try {
-        response = await fetch(url, {
+        const maxAttempts = Math.min(8, Math.max(1, Number(env.OPENAI_MAX_ATTEMPTS || 5)));
+        response = await fetchOpenAIWithRetry(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${env.OPENAI_API_KEY}`
+                'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+                'HTTP-Referer': 'https://ai-daily.qaz875133228.workers.dev',
+                'X-Title': 'AI Insight Daily'
             },
             body: JSON.stringify(payload)
-        });
+        }, maxAttempts);
 
         if (!response.ok) {
             const errorBodyText = await response.text();
@@ -473,22 +572,27 @@ async function* callOpenAIChatAPIStream(env, promptText, systemPromptText = null
                 if (message === "" || message === "[DONE]") {
                     continue;
                 }
+                if (message.startsWith(':')) {
+                    continue; // SSE keep-alive/comment, e.g. ": OPENROUTER PROCESSING"
+                }
                 
+                let parsedChunk;
                 try {
-                    const parsedChunk = JSON.parse(message);
-                    if (parsedChunk.choices && parsedChunk.choices.length > 0) {
-                        const delta = parsedChunk.choices[0].delta;
-                        if (delta && delta.content) {
-                            hasYieldedContent = true;
-                            yield delta.content;
-                        }
-                    } else if (parsedChunk.error) {
-                        console.error("OpenAI Chat API Stream Error Chunk:", JSON.stringify(parsedChunk.error, null, 2));
-                        throw new Error(`OpenAI Chat API stream error: ${parsedChunk.error.message || 'Unknown error in stream'}`);
-                    }
+                    parsedChunk = JSON.parse(message);
                 } catch (e) {
                     console.warn("Failed to parse JSON chunk from OpenAI stream:", message, e.message);
-                    // Continue processing, might be an incomplete chunk
+                    continue;
+                }
+                if (parsedChunk.error) {
+                    console.error("OpenAI Chat API Stream Error Chunk:", JSON.stringify(parsedChunk.error, null, 2));
+                    throw new Error(`OpenAI Chat API stream error: ${parsedChunk.error.message || 'Unknown error in stream'}`);
+                }
+                if (parsedChunk.choices && parsedChunk.choices.length > 0) {
+                    const delta = parsedChunk.choices[0].delta;
+                    if (delta && delta.content) {
+                        hasYieldedContent = true;
+                        yield delta.content;
+                    }
                 }
             }
         }
@@ -500,20 +604,24 @@ async function* callOpenAIChatAPIStream(env, promptText, systemPromptText = null
                 finalMessage = finalMessage.substring(5).trim();
             }
             if (finalMessage !== "" && finalMessage !== "[DONE]") {
+                if (finalMessage.startsWith(':')) return;
+                let parsedChunk;
                 try {
-                    const parsedChunk = JSON.parse(finalMessage);
-                    if (parsedChunk.choices && parsedChunk.choices.length > 0) {
-                        const delta = parsedChunk.choices[0].delta;
-                        if (delta && delta.content) {
-                            hasYieldedContent = true;
-                            yield delta.content;
-                        }
-                    } else if (parsedChunk.error) {
-                        console.error("OpenAI Chat API Stream Error Chunk:", JSON.stringify(parsedChunk.error, null, 2));
-                        throw new Error(`OpenAI Chat API stream error: ${parsedChunk.error.message || 'Unknown error in stream'}`);
-                    }
+                    parsedChunk = JSON.parse(finalMessage);
                 } catch (e) {
                     console.warn("Failed to parse final JSON chunk from OpenAI stream:", finalMessage, e.message);
+                    parsedChunk = null;
+                }
+                if (parsedChunk?.error) {
+                    console.error("OpenAI Chat API Stream Error Chunk:", JSON.stringify(parsedChunk.error, null, 2));
+                    throw new Error(`OpenAI Chat API stream error: ${parsedChunk.error.message || 'Unknown error in stream'}`);
+                }
+                if (parsedChunk?.choices && parsedChunk.choices.length > 0) {
+                    const delta = parsedChunk.choices[0].delta;
+                    if (delta && delta.content) {
+                        hasYieldedContent = true;
+                        yield delta.content;
+                    }
                 }
             }
         }

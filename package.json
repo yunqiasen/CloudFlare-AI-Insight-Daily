@@ -1,0 +1,15 @@
+{
+  "name": "ai-daily",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "check": "node --check src/index.js && wrangler deploy --dry-run --outdir /tmp/ai-daily-dryrun",
+    "dev": "wrangler dev --config wrangler.local.toml",
+    "deploy": "wrangler deploy",
+    "deploy:local-config": "wrangler deploy --config wrangler.local.toml"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,36 +1,32 @@
-# wrangler.toml
-name = "ai-daily"
-main = "src/index.js" # <-- Important: path to your main worker script
-compatibility_date = "2025-05-20" # Or your project's compatibility date
+name = "ai-daily-local"
+main = "src/index.js"
+compatibility_date = "2025-05-20"
 workers_dev = true
-routes = [
-  { pattern = "daily.xinghaihub.com", custom_domain = true }
-]
 
 kv_namespaces = [
-  { binding = "DATA_KV", id = "f36a537809484dc085e871ea829f67e0" }
+  { binding = "DATA_KV", id = "local-data-kv" }
 ]
 
 [vars]
-IMG_PROXY = ""  #图片代理链接，用于处理图片不显示
+IMG_PROXY = ""
 OPEN_TRANSLATE = "true"
-USE_MODEL_PLATFORM = "OPEN" #GEMINI, OPEN
+USE_MODEL_PLATFORM = "OPEN"
 GEMINI_API_URL = "https://generativelanguage.googleapis.com"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-preview-05-20"
 OPENAI_API_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPEN_MODEL = "google/gemma-4-26b-a4b-it:free"
 OPENAI_MAX_ATTEMPTS = "5"
-FOLO_COOKIE_KV_KEY = "folo_auth_cookie" 
+FOLO_COOKIE_KV_KEY = "folo_auth_cookie"
 FOLO_DATA_API = "https://api.follow.is/entries"
-FOLO_FILTER_DAYS = 1
-NEWS_AGGREGATOR_LIST_ID = "158437828119024640" 
-NEWS_AGGREGATOR_FETCH_PAGES = "1" 
+FOLO_FILTER_DAYS = "1"
+NEWS_AGGREGATOR_LIST_ID = "158437828119024640"
+NEWS_AGGREGATOR_FETCH_PAGES = "1"
 HGPAPERS_LIST_ID = "158437917409783808"
 HGPAPERS_FETCH_PAGES = "1"
-TWITTER_LIST_ID = "153028784690326528" 
-TWITTER_FETCH_PAGES = "1" 
-REDDIT_LIST_ID = "167576006499975168" 
-REDDIT_FETCH_PAGES = "1" 
+TWITTER_LIST_ID = "153028784690326528"
+TWITTER_FETCH_PAGES = "1"
+REDDIT_LIST_ID = "167576006499975168"
+REDDIT_FETCH_PAGES = "1"
 PROJECTS_API_URL = "https://rss.xinghaihub.com/github/trending/daily/any?format=json"
 GITHUB_REPO_OWNER = "yunqiasen"
 GITHUB_REPO_NAME = "CloudFlare-AI-Insight-Daily"

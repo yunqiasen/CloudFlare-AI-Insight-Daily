@@ -4,9 +4,9 @@ import { getFromKV } from '../kv.js';
 import { callChatAPIStream } from '../chatapi.js';
 import { generateGenAiPageHtml } from '../htmlGenerators.js';
 import { dataSources } from '../dataFetchers.js'; // Import dataSources
-import { getSystemPromptSummarizationStepOne } from "../prompt/summarizationPromptStepZero";
-import { getSystemPromptSummarizationStepTwo } from "../prompt/summarizationPromptStepTwo";
-import { getSystemPromptSummarizationStepThree } from "../prompt/summarizationPromptStepThree";
+import { getSystemPromptSummarizationStepOne } from "../prompt/summarizationPromptStepZero.js";
+import { getSystemPromptSummarizationStepTwo } from "../prompt/summarizationPromptStepTwo.js";
+import { getSystemPromptSummarizationStepThree } from "../prompt/summarizationPromptStepThree.js";
 import { getSystemPromptPodcastFormatting, getSystemPromptShortPodcastFormatting } from '../prompt/podcastFormattingPrompt.js';
 import { getSystemPromptDailyAnalysis } from '../prompt/dailyAnalysisPrompt.js'; // Import new prompt
 import { insertFoot } from '../foot.js';

@@ -2,9 +2,9 @@
 
 /**
  * 全域參數，用於指定資料抓取的日期。
- * 預設為當前日期，格式為 YYYY-MM-DD。
+ * 未显式设置时为 null，由请求处理阶段实时计算日期。
  */
-export let fetchDate = getISODate();
+export let fetchDate = null;
 
 export function setFetchDate(date) {
     fetchDate = date;
@@ -42,10 +42,10 @@ export function escapeHtml(unsafe) {
     }
     const str = String(unsafe);
     const map = {
-        '&': '&',
-        '<': '<',
-        '>': '>',
-        '"': '"',
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
         "'": '&#039;'
     };
     return str.replace(/[&<>"']/g, (m) => map[m]);

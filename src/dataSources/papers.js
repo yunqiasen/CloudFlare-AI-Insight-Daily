@@ -1,4 +1,4 @@
-import { getRandomUserAgent, sleep, isDateWithinLastDays, stripHtml, formatDateToChineseWithTime, escapeHtml } from '../helpers';
+import { getRandomUserAgent, sleep, isDateWithinLastDays, stripHtml, formatDateToChineseWithTime, escapeHtml } from '../helpers.js';
 
 const PapersDataSource = {
     type: 'papers',
@@ -64,8 +64,8 @@ const PapersDataSource = {
                 });
 
                 if (!response.ok) {
-                    console.error(`Failed to fetch Papers data, page ${i + 1}: ${response.statusText}`);
-                    break;
+                    const body = (await response.text()).slice(0, 300);
+                    throw new Error(`Folo Papers API ${response.status} ${response.statusText}: ${body}`);
                 }
                 const data = await response.json();
                 if (data && data.data && data.data.length > 0) {
@@ -86,7 +86,7 @@ const PapersDataSource = {
                 }
             } catch (error) {
                 console.error(`Error fetching Papers data, page ${i + 1}:`, error);
-                break;
+                throw error;
             }
 
             await sleep(Math.random() * 5000);

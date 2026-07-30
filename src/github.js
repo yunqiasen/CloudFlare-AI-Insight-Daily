@@ -122,8 +122,7 @@ function b64EncodeUnicode(str) {
         }));
     } catch (e) {
         console.error("Base64 Encoding Error:", e);
-        showStatus("Error: Could not encode content for GitHub.", true);
-        return null; // Return null on error
+        throw new Error("Could not encode content for GitHub.");
     }
 }
 
@@ -136,7 +135,6 @@ function b64DecodeUnicode(str) {
         }).join(''));
     } catch(e) {
         console.error("Base64 Decoding Error:", e);
-        showStatus("Error: Could not decode file content from GitHub.", true);
-        return null; // Return null on error
+        throw new Error("Could not decode file content from GitHub.");
     }
 }

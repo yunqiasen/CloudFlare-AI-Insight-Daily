@@ -26,11 +26,13 @@ export const dataSources = {
 export async function fetchAndTransformDataForType(sourceType, env, foloCookie) {
     const sources = dataSources[sourceType].sources;
     if (!sources || !Array.isArray(sources)) {
-        console.error(`No data sources registered for type: ${sourceType}`);
-        return [];
+        const message = `No data sources registered for type: ${sourceType}`;
+        console.error(message);
+        return { items: [], errors: [message] };
     }
 
     let allUnifiedDataForType = [];
+    const errors = [];
     for (const dataSource of sources) {
         try {
             // Pass foloCookie to the fetch method of the data source
@@ -38,7 +40,10 @@ export async function fetchAndTransformDataForType(sourceType, env, foloCookie) 
             const unifiedData = dataSource.transform(rawData, sourceType);
             allUnifiedDataForType = allUnifiedDataForType.concat(unifiedData);
         } catch (error) {
-            console.error(`Error fetching or transforming data from source ${dataSource.type} for type ${sourceType}:`, error.message);
+            const sourceName = dataSource.type || dataSource.name || 'unknown';
+            const message = `Error fetching or transforming data from source ${sourceName} for type ${sourceType}: ${error.message}`;
+            console.error(message);
+            errors.push(message);
             // Continue to next data source even if one fails
         }
     }
@@ -50,7 +55,7 @@ export async function fetchAndTransformDataForType(sourceType, env, foloCookie) 
         return dateB.getTime() - dateA.getTime();
     });
 
-    return allUnifiedDataForType;
+    return { items: allUnifiedDataForType, errors };
 }
 
 /**
@@ -61,19 +66,23 @@ export async function fetchAndTransformDataForType(sourceType, env, foloCookie) 
  */
 export async function fetchAllData(env, foloCookie) {
     const allUnifiedData = {};
+    const errors = [];
+    const errorsByType = {};
     const fetchPromises = [];
 
     for (const sourceType in dataSources) {
         if (Object.hasOwnProperty.call(dataSources, sourceType)) {
             fetchPromises.push(
-                fetchAndTransformDataForType(sourceType, env, foloCookie).then(data => {
-                    allUnifiedData[sourceType] = data;
+                fetchAndTransformDataForType(sourceType, env, foloCookie).then(result => {
+                    allUnifiedData[sourceType] = result.items;
+                    errors.push(...result.errors);
+                    if (result.errors.length > 0) errorsByType[sourceType] = result.errors;
                 })
             );
         }
     }
     await Promise.allSettled(fetchPromises); // Use allSettled to ensure all promises complete
-    return allUnifiedData;
+    return { data: allUnifiedData, errors, errorsByType };
 }
 
 /**
@@ -85,8 +94,9 @@ export async function fetchAllData(env, foloCookie) {
  */
 export async function fetchDataByCategory(env, category, foloCookie) {
     if (!dataSources[category]) {
-        console.warn(`Attempted to fetch data for unknown category: ${category}`);
-        return [];
+        const message = `Attempted to fetch data for unknown category: ${category}`;
+        console.warn(message);
+        return { items: [], errors: [message] };
     }
     return await fetchAndTransformDataForType(category, env, foloCookie);
 }

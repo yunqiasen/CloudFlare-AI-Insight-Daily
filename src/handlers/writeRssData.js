@@ -3,7 +3,7 @@ import { getDailyReportContent, getGitHubFileSha, createOrUpdateGitHubFile } fro
 import { storeInKV } from '../kv.js';
 import { marked } from '../marked.esm.js';
 import { callChatAPI } from '../chatapi.js'; // 导入 callChatAPI
-import { getSummarizationSimplifyPrompt } from "../prompt/summarizationSimplifyPrompt";
+import { getSummarizationSimplifyPrompt } from "../prompt/summarizationSimplifyPrompt.js";
 import { getAppUrl } from '../appUrl.js';
 
 /**
